@@ -69,7 +69,7 @@ Look for the **Init Containers** section:
 Init Containers:
   wait-for-redis:
     Container ID:  docker://abc123...
-    Image:         busybox:1.36
+    Image:         vellankikoti/k8s-masterclass-init-wait:v1.0
     State:         Waiting
       Reason:      CrashLoopBackOff
     Last State:    Terminated
@@ -84,7 +84,7 @@ Events:
   Type     Reason     Age                From               Message
   ----     ------     ----               ----               -------
   Normal   Scheduled  1m                 default-scheduler  Successfully assigned default/todo-app-xxx to node
-  Normal   Pulled     1m                 kubelet            Container image "busybox:1.36" already present
+  Normal   Pulled     1m                 kubelet            Container image "vellankikoti/k8s-masterclass-init-wait:v1.0" already present
   Normal   Created    1m                 kubelet            Created container wait-for-redis
   Normal   Started    1m                 kubelet            Started container wait-for-redis
   Warning  Failed     30s (x3 over 1m)   kubelet            Error: failed to start container "wait-for-redis": Error response from daemon
@@ -113,7 +113,7 @@ kubectl get deployment todo-app -o yaml | grep -A 20 initContainers
 ```yaml
 initContainers:
 - name: wait-for-redis
-  image: busybox:1.36
+  image: vellankikoti/k8s-masterclass-init-wait:v1.0
   command:
   - sh
   - -c
@@ -217,7 +217,7 @@ spec:
     spec:
       containers:
       - name: redis
-        image: redis:7-alpine
+        image: vellankikoti/k8s-masterclass-redis:v1.0
         ports:
         - containerPort: 6379
 ---
@@ -244,7 +244,7 @@ spec:
     spec:
       initContainers:
       - name: wait-for-redis
-        image: busybox:1.36
+        image: vellankikoti/k8s-masterclass-init-wait:v1.0
         command:
         - sh
         - -c
@@ -334,10 +334,20 @@ Redis not available yet...
 Test the todo application:
 
 ```bash
-kubectl port-forward -l app=todo 8080:5000
+# Get pod name first (kubectl port-forward doesn't support -l flag)
+TODO_POD=$(kubectl get pod -l app=todo -o jsonpath='{.items[0].metadata.name}')
+
+# Port-forward: local port 8080 → container port 5000
+kubectl port-forward $TODO_POD 8080:5000
 ```
 
-Access http://localhost:8080 - you should see the todo application working with Redis!
+**Note:** Keep this terminal open while port-forward is running.
+
+Then open **http://localhost:8080** in your browser - you should see the todo application working with Redis!
+
+**Important:** 
+- Use `http://localhost:8080` (the local forwarded port), not `localhost:5000`
+- The port-forward command maps: local port 8080 → container port 5000
 
 ## Step 6: Cleanup
 
@@ -400,7 +410,7 @@ kubectl get pod <pod-name> -o jsonpath='{.status.initContainerStatuses[*].state}
 # Wait for service
 initContainers:
 - name: wait-for-db
-  image: busybox
+  image: vellankikoti/k8s-masterclass-init-wait:v1.0
   command: ['sh', '-c', 'until nc -z db-service 5432; do sleep 2; done']
 
 # Download configuration

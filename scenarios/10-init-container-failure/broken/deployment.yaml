@@ -19,7 +19,7 @@ spec:
       # This will cause the pod to stay in Init:Error or Init:CrashLoopBackOff
       initContainers:
       - name: wait-for-redis
-        image: busybox:1.36
+        image: vellankikoti/k8s-masterclass-init-wait:v1.0
         command:
         - sh
         - -c

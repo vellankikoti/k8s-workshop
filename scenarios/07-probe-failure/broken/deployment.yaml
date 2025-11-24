@@ -21,13 +21,14 @@ spec:
         ports:
         - containerPort: 5000
         # BROKEN: Readiness probe checks wrong endpoint!
-        # Should check /ready but checking /health instead
+        # Should check /ready but checking /readiness (doesn't exist) instead
         readinessProbe:
           httpGet:
-            path: /health  # Wrong! Should be /ready
+            path: /readiness  # Wrong! This endpoint doesn't exist. Should be /ready
             port: 5000
           initialDelaySeconds: 5
           periodSeconds: 5
+          failureThreshold: 3
         livenessProbe:
           httpGet:
             path: /health

@@ -49,7 +49,9 @@ image-processor-xxxxxxxxxx-xxxxx   1/1     Running   0          30s
 
 ```bash
 # Port-forward to access the service
-kubectl port-forward -l app=image-processor 8080:5000 &
+# Note: kubectl port-forward doesn't support -l flag, so get pod name first
+POD_NAME=$(kubectl get pod -l app=image-processor -o jsonpath='{.items[0].metadata.name}')
+kubectl port-forward $POD_NAME 8080:5000 &
 ```
 
 In another terminal, trigger image processing:
@@ -60,25 +62,39 @@ curl -X POST http://localhost:8080/process \
   -d '{"count": 15}'
 ```
 
-Now check the pod status again:
+**What you might see:**
+- `curl: (52) Empty reply from server` - This is expected! The pod was killed during processing.
+- Or the request might hang/timeout
+
+Now check the pod status:
 
 ```bash
 kubectl get pods -l app=image-processor
 ```
 
 **What you should see:**
+
+**Option 1: Pod shows OOMKilled (caught immediately):**
 ```
 NAME                              READY   STATUS      RESTARTS   AGE
 image-processor-xxxxxxxxxx-xxxxx   0/1     OOMKilled   1          2m
 ```
 
-Or it might show:
+**Option 2: Pod shows Running but has restarted (most common):**
+```
+NAME                              READY   STATUS    RESTARTS   AGE
+image-processor-xxxxxxxxxx-xxxxx   1/1     Running   1          2m
+```
+
+**Note:** If you see `Running` with `RESTARTS: 1` or more, the pod was OOMKilled and Kubernetes restarted it. This is normal behavior - Kubernetes automatically restarts pods that crash.
+
+**Option 3: Pod shows CrashLoopBackOff (multiple restarts):**
 ```
 NAME                              READY   STATUS             RESTARTS   AGE
 image-processor-xxxxxxxxxx-xxxxx   0/1     CrashLoopBackOff   3          3m
 ```
 
-❌ The pod was killed due to out-of-memory!
+❌ The pod was killed due to out-of-memory! Even if it shows as `Running` now, check the details to confirm OOMKilled occurred.
 
 ## Step 3: Investigate
 
@@ -86,6 +102,8 @@ image-processor-xxxxxxxxxx-xxxxx   0/1     CrashLoopBackOff   3          3m
 ```bash
 kubectl describe pod -l app=image-processor
 ```
+
+**Important:** Even if the pod shows as `Running`, check the **Last State** section to see if it was OOMKilled:
 
 Look for the **Last State** section:
 
@@ -97,6 +115,8 @@ Last State:     Terminated
   Finished:     ...
 ```
 
+**Exit Code 137** = 128 + 9 (SIGKILL) indicates the process was killed by the system (OOM killer).
+
 Also check the **Events** section:
 
 ```
@@ -105,6 +125,25 @@ Events:
   ----     ------     ----               ----               -------
   Warning  OOMKilled  30s                kubelet            Memory limit exceeded
 ```
+
+### Quick Verification Commands
+
+```bash
+# Check if pod was OOMKilled (even if now Running)
+kubectl describe pod -l app=image-processor | grep -A 5 "Last State"
+
+# Check for OOMKilled in events
+kubectl describe pod -l app=image-processor | grep -i "oom"
+
+# Get the exact reason programmatically
+kubectl get pod -l app=image-processor -o jsonpath='{.items[0].status.containerStatuses[0].lastState.terminated.reason}'
+# Should output: OOMKilled
+```
+
+**Understanding Pod Restart Behavior:**
+- When a pod is OOMKilled, Kubernetes automatically restarts it
+- The pod may show as `Running` after restart, but `RESTARTS: 1` indicates it was killed
+- Always check `Last State` or `Events` to confirm OOMKilled occurred
 
 ### Check Resource Limits
 ```bash
@@ -220,7 +259,9 @@ Test processing more images:
 
 ```bash
 # Port-forward if not already running
-kubectl port-forward -l app=image-processor 8080:5000 &
+# Get pod name first (kubectl port-forward doesn't support -l flag)
+POD_NAME=$(kubectl get pod -l app=image-processor -o jsonpath='{.items[0].metadata.name}')
+kubectl port-forward $POD_NAME 8080:5000 &
 
 # Process 15 images
 curl -X POST http://localhost:8080/process \
@@ -228,7 +269,12 @@ curl -X POST http://localhost:8080/process \
   -d '{"count": 15}'
 ```
 
-Check the pod status - it should remain running:
+**Expected output:**
+```json
+{"status": "success", "processed": 15, "message": "Successfully processed 15 images"}
+```
+
+Check the pod status - it should remain running without restarting:
 
 ```bash
 kubectl get pods -l app=image-processor

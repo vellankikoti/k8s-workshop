@@ -64,19 +64,31 @@ webapp-service   ClusterIP   10.96.xxx.xxx   <none>        80/TCP    30s
 
 But let's try to access it:
 
+**Option 1: Test from inside cluster (recommended for this step):**
 ```bash
 kubectl run curl-test --image=curlimages/curl:latest --rm -it --restart=Never -- \
   curl -v http://webapp-service
 ```
 
+**Option 2: Test via port-forward (for localhost access):**
+```bash
+# Port-forward through service: localhost:8080 → service:80 → pod:8080 (broken!)
+kubectl port-forward svc/webapp-service 8080:80
+```
+
+In another terminal or browser, try:
+```bash
+curl http://localhost:8080
+# OR open http://localhost:8080 in browser
+```
+
 **What you should see:**
-```
-* Could not resolve host: webapp-service
-OR
-* Connection refused
-OR
-* Timeout
-```
+- **From cluster test**: Connection refused, timeout, or "Could not connect"
+- **From port-forward**: Connection established but no response, or timeout
+- **Browser**: Page doesn't load or connection error
+
+**Why it fails:**
+The service is trying to forward traffic to port 8080 on the pods, but the container is listening on port 5000. The port-forward connects, but nothing responds because nothing is listening on port 8080.
 
 ❌ Service exists but connectivity fails!
 
@@ -247,7 +259,9 @@ ports:
 
 ## Step 5: Verify the Fix
 
-Test the service now works:
+Test the service now works. You can test in multiple ways:
+
+### Method 1: Test from inside cluster (recommended)
 
 ```bash
 kubectl run curl-test --image=curlimages/curl:latest --rm -it --restart=Never -- \
@@ -265,6 +279,46 @@ kubectl run curl-test --image=curlimages/curl:latest --rm -it --restart=Never --
 ```
 
 ✅ Service is working!
+
+### Method 2: Test via port-forward (for localhost access)
+
+**Important:** When port-forwarding to a service, use the **service port (80)**, not the container port (5000):
+
+```bash
+# Correct: localhost:8080 → service:80 → pod:5000
+kubectl port-forward svc/webapp-service 8080:80
+```
+
+**Note:** The format is `kubectl port-forward svc/<service-name> <local-port>:<service-port>`
+- `8080` = your local port (you can choose any port)
+- `80` = the service port (NOT the container port 5000)
+
+In another terminal or browser:
+```bash
+curl http://localhost:8080
+# OR open http://localhost:8080 in browser
+```
+
+**Expected output:**
+```json
+{
+  "status": "success",
+  "message": "Welcome to the Kubernetes Masterclass!",
+  "scenario": "03 - Port Mismatch",
+  "pod_name": "webapp-xxxxxxxxxx-xxxxx"
+}
+```
+
+✅ Service is working through port-forward!
+
+**Alternative: Port-forward directly to pod (bypasses service)**
+```bash
+# Direct pod access: localhost:8080 → pod:5000
+kubectl port-forward -l app=webapp 8080:5000
+```
+This works in both broken and fixed states since it bypasses the service.
+
+### Method 3: Test load balancing
 
 Test multiple times to see load balancing across pods:
 ```bash
@@ -295,7 +349,12 @@ kubectl delete -f solution/
 
 - **Port mismatch**: Most common issue - targetPort must match containerPort
 - **Selector mismatch**: Service selector must match pod labels
-- **Wrong port type**: Connecting to `port` instead of `targetPort` when port-forwarding
+- **Wrong port when port-forwarding to service**: Use service port (80), not container port (5000)
+  - ✅ Correct: `kubectl port-forward svc/webapp-service 8080:80`
+  - ❌ Wrong: `kubectl port-forward svc/webapp-service 8080:5000`
+- **Port-forward to pod vs service**: 
+  - Pod: `kubectl port-forward <pod> 8080:5000` (uses container port)
+  - Service: `kubectl port-forward svc/<service> 8080:80` (uses service port)
 - **Network policies**: Can block traffic even when ports are correct
 - **DNS not ready**: Give DNS a few seconds to propagate service names
 

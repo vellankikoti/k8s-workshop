@@ -105,7 +105,9 @@ kubectl get deployment pod-monitor -o yaml | grep -A 3 serviceAccount
 
 ### Access the Dashboard (Optional)
 ```bash
-kubectl port-forward -l app=pod-monitor 8080:5000
+# Get pod name first (kubectl port-forward doesn't support -l flag)
+POD_NAME=$(kubectl get pod -l app=pod-monitor -o jsonpath='{.items[0].metadata.name}')
+kubectl port-forward $POD_NAME 8080:5000
 ```
 
 Open http://localhost:8080 in your browser - you'll see the error message displayed.
@@ -235,7 +237,9 @@ yes
 Access the dashboard:
 
 ```bash
-kubectl port-forward -l app=pod-monitor 8080:5000
+# Get pod name first (kubectl port-forward doesn't support -l flag)
+POD_NAME=$(kubectl get pod -l app=pod-monitor -o jsonpath='{.items[0].metadata.name}')
+kubectl port-forward $POD_NAME 8080:5000
 ```
 
 Open http://localhost:8080 - you should now see a list of pods in the dashboard!

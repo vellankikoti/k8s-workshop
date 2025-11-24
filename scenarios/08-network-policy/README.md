@@ -41,7 +41,7 @@ networkpolicy.networking.k8s.io/deny-all-ingress created
 Wait about 15-20 seconds, then check pod status:
 
 ```bash
-kubectl get pods
+kubectl get pods -l 'app in (order,inventory)'
 ```
 
 **What you should see:**
@@ -53,25 +53,34 @@ order-service-xxxxxxxxxx-xxxxx       1/1     Running   0          30s
 
 ✅ Both pods are running! But let's check if they can communicate:
 
-```bash
-# Port-forward to order service
-kubectl port-forward -l app=order 8080:5000 &
-```
-
-Open http://localhost:8080 in your browser, or check logs:
+### Test Connectivity
 
 ```bash
-kubectl logs -l app=order --tail=20
+# Get order pod name
+ORDER_POD=$(kubectl get pod -l app=order -o jsonpath='{.items[0].metadata.name}')
+
+# Try to connect to inventory service from order pod
+kubectl exec $ORDER_POD -- wget -O- --timeout=3 http://inventory-service:80
 ```
 
-**What you should see:**
+**Expected output:**
 ```
-[2025-11-24 ...] Starting Order Service...
-[2025-11-24 ...] ERROR: Connection refused - NetworkPolicy may be blocking traffic
-[2025-11-24 ...] Cannot connect to inventory-service
+wget: download timed out
+```
+OR
+```
+wget: can't connect to remote host
 ```
 
-❌ The order service cannot connect to the inventory service!
+❌ Connection fails! This proves the NetworkPolicy is blocking traffic.
+
+### Check Order Service Logs
+
+```bash
+kubectl logs -l app=order --tail=10
+```
+
+The logs may show connection errors or the service may be waiting to connect.
 
 ## Step 3: Investigate
 
@@ -128,23 +137,6 @@ Spec:
   Policy Types: Ingress
 ```
 
-### Test Connectivity from Order Pod
-```bash
-# Get order pod name
-ORDER_POD=$(kubectl get pod -l app=order -o jsonpath='{.items[0].metadata.name}')
-
-# Try to connect to inventory service from order pod
-kubectl exec $ORDER_POD -- wget -O- --timeout=3 http://inventory-service:80
-```
-
-**Expected output:**
-```
-wget: download timed out
-OR
-wget: can't connect to remote host
-```
-
-❌ Connection fails!
 
 ### Check Pod Labels
 ```bash
@@ -263,41 +255,53 @@ spec:
 
 ## Step 5: Verify the Fix
 
-Check that the order service can now connect:
+Wait a few seconds for the NetworkPolicy to take effect, then test connectivity:
 
 ```bash
-kubectl logs -l app=order --tail=20
-```
-
-**Expected output:**
-```
-[2025-11-24 ...] Starting Order Service...
-[2025-11-24 ...] ✅ Successfully connected to inventory-service
-[2025-11-24 ...] Dashboard ready at http://0.0.0.0:5000
-```
-
-✅ Connection successful!
-
-Test from the order pod:
-
-```bash
+# Test connectivity from order pod to inventory service
 ORDER_POD=$(kubectl get pod -l app=order -o jsonpath='{.items[0].metadata.name}')
 kubectl exec $ORDER_POD -- wget -O- --timeout=3 http://inventory-service:80
 ```
 
-You should see a successful response!
-
-Access the order service dashboard:
-
-```bash
-kubectl port-forward -l app=order 8080:5000
+**Expected output:**
+```
+Connecting to inventory-service:80 (10.96.xxx.xxx:80)
+writing to stdout
+-                    100% |********************************|   148  0:00:00 ETA
+written to stdout
+{"endpoints":["/inventory","/check/<item>","/reserve"],"pod":"...","service":"Inventory Service","status":"running"}
 ```
 
-Open http://localhost:8080 - you should now see the inventory items displayed!
+✅ Connection successful! The NetworkPolicy now allows traffic.
+
+### Access the Order Service Dashboard
+
+To see the order service UI with inventory items:
+
+```bash
+# Get pod name first (kubectl port-forward doesn't support -l flag)
+ORDER_POD=$(kubectl get pod -l app=order -o jsonpath='{.items[0].metadata.name}')
+
+# Port-forward: local port 8080 → container port 5000
+kubectl port-forward $ORDER_POD 8080:5000
+```
+
+**Note:** Keep this terminal open while port-forward is running.
+
+Then open **http://localhost:8080** in your browser - you should see the inventory items displayed!
+
+**Important:** 
+- Use `http://localhost:8080` (the local forwarded port), not `localhost:5000`
+- The port-forward command maps: local port 8080 → container port 5000
 
 ## Step 6: Cleanup
 
 ```bash
+# Stop port-forward if still running (Ctrl+C in the terminal where it's running)
+# Or kill it:
+pkill -f "kubectl port-forward.*8080" || true
+
+# Delete resources
 kubectl delete -f solution/
 ```
 

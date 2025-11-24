@@ -31,6 +31,8 @@ declare -a SCENARIOS=(
     "netpol-server:08-network-policy/app-server"
     "storage-app:09-pvc-pending/app"
     "init-app:10-init-container-failure/app"
+    "init-wait:10-init-container-failure/init-wait"
+    "redis:10-init-container-failure/redis"
 )
 
 print_header() {
