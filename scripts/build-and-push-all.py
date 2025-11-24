@@ -67,6 +67,57 @@ def check_docker():
         print("Please start Docker Desktop and try again")
         sys.exit(1)
 
+    # Check Docker buildx
+    try:
+        result = subprocess.run(
+            ["docker", "buildx", "version"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        print("✅ Docker buildx is available")
+    except:
+        print("❌ Docker buildx is not available")
+        print("Please update Docker to a version that supports buildx")
+        sys.exit(1)
+
+    # Setup buildx builder for multi-platform
+    print("\n▶ Setting up buildx builder for multi-platform builds")
+    try:
+        # Check if builder exists
+        result = subprocess.run(
+            ["docker", "buildx", "inspect", "multiplatform"],
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            # Create new builder
+            subprocess.run(
+                ["docker", "buildx", "create", "--name", "multiplatform", "--use"],
+                check=True,
+                capture_output=True
+            )
+            print("✅ Created multiplatform builder")
+        else:
+            # Use existing builder
+            subprocess.run(
+                ["docker", "buildx", "use", "multiplatform"],
+                check=True,
+                capture_output=True
+            )
+            print("✅ Using existing multiplatform builder")
+
+        # Bootstrap the builder
+        subprocess.run(
+            ["docker", "buildx", "inspect", "--bootstrap"],
+            check=True,
+            capture_output=True
+        )
+        print("✅ Builder ready for multi-platform builds (linux/amd64, linux/arm64)")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not setup buildx builder: {e}")
+        print("Will attempt to continue with default builder")
+
     # Check Docker login
     try:
         result = subprocess.run(
@@ -86,7 +137,7 @@ def check_docker():
         print("You may need to run: docker login -u", DOCKER_USER)
 
 def build_image(scenario_name, scenario_path):
-    """Build a Docker image"""
+    """Build a multi-platform Docker image using buildx"""
     image_name = f"{DOCKER_USER}/{REPO_PREFIX}-{scenario_name}"
     tag_v1 = f"{image_name}:{VERSION}"
     tag_latest = f"{image_name}:latest"
@@ -100,10 +151,18 @@ def build_image(scenario_name, scenario_path):
         print(f"❌ Directory not found: {build_context}")
         return False
 
-    # Build command
-    build_cmd = f'docker build -t "{tag_v1}" -t "{tag_latest}" "{build_context}"'
+    # Build and push command using buildx for multi-platform support
+    # This builds for both linux/amd64 and linux/arm64 and pushes directly
+    build_cmd = (
+        f'docker buildx build '
+        f'--platform linux/amd64,linux/arm64 '
+        f'-t "{tag_v1}" '
+        f'-t "{tag_latest}" '
+        f'--push '
+        f'"{build_context}"'
+    )
 
-    return run_command(build_cmd, f"Building {scenario_name}")
+    return run_command(build_cmd, f"Building and pushing {scenario_name} (multi-platform)")
 
 def push_image(scenario_name):
     """Push a Docker image to Docker Hub"""
@@ -138,20 +197,14 @@ def main():
         print(f"\n[{idx}/{len(SCENARIOS)}] Processing: {scenario_name}")
         print("-" * 60)
 
-        # Build
+        # Build and push (buildx does both in one step)
         if not build_image(scenario_name, scenario_path):
             failed_scenarios.append(scenario_name)
-            print(f"⚠️  Skipping push for {scenario_name} due to build failure\n")
-            continue
-
-        # Push
-        if not push_image(scenario_name):
-            failed_scenarios.append(scenario_name)
-            print(f"⚠️  Push failed for {scenario_name}\n")
+            print(f"⚠️  Build/push failed for {scenario_name}\n")
             continue
 
         success_count += 1
-        print(f"✅ Successfully built and pushed {scenario_name}\n")
+        print(f"✅ Successfully built and pushed {scenario_name} (multi-platform)\n")
 
     # Summary
     print_header("Build Summary")

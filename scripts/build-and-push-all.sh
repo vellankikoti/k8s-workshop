@@ -74,6 +74,36 @@ check_prerequisites() {
     fi
     print_success "Docker is running"
 
+    # Check Docker buildx
+    if ! docker buildx version &> /dev/null; then
+        print_error "Docker buildx is not available"
+        echo "Please update Docker to a version that supports buildx"
+        exit 1
+    fi
+    print_success "Docker buildx is available"
+
+    # Setup buildx builder for multi-platform
+    echo ""
+    print_info "Setting up buildx builder for multi-platform builds"
+
+    # Check if builder exists
+    if ! docker buildx inspect multiplatform &> /dev/null; then
+        # Create new builder
+        if docker buildx create --name multiplatform --use &> /dev/null; then
+            print_success "Created multiplatform builder"
+        else
+            print_warning "Could not create buildx builder"
+        fi
+    else
+        # Use existing builder
+        docker buildx use multiplatform &> /dev/null
+        print_success "Using existing multiplatform builder"
+    fi
+
+    # Bootstrap the builder
+    docker buildx inspect --bootstrap &> /dev/null
+    print_success "Builder ready for multi-platform builds (linux/amd64, linux/arm64)"
+
     # Check Docker Hub login
     if ! docker info 2>/dev/null | grep -q "Username: $DOCKER_USER"; then
         print_warning "Not logged in to Docker Hub as $DOCKER_USER"
@@ -84,7 +114,7 @@ check_prerequisites() {
     fi
 }
 
-build_image() {
+build_and_push_image() {
     local scenario_name="$1"
     local scenario_path="$2"
     local image_name="$DOCKER_USER/$REPO_PREFIX-$scenario_name"
@@ -99,43 +129,23 @@ build_image() {
         return 1
     fi
 
-    print_info "Building $scenario_name from $scenario_path"
+    print_info "Building and pushing $scenario_name (multi-platform: linux/amd64, linux/arm64)"
 
-    # Build with both tags
-    if docker build \
+    # Build and push with buildx for multi-platform support
+    if docker buildx build \
+        --platform linux/amd64,linux/arm64 \
         -t "$image_name:$VERSION" \
         -t "$image_name:latest" \
+        --push \
         "$build_context"; then
-        print_success "Built $scenario_name"
+        print_success "Built and pushed $scenario_name (multi-platform)"
         return 0
     else
-        print_error "Failed to build $scenario_name"
+        print_error "Failed to build/push $scenario_name"
         return 1
     fi
 }
 
-push_image() {
-    local scenario_name="$1"
-    local image_name="$DOCKER_USER/$REPO_PREFIX-$scenario_name"
-
-    print_info "Pushing $scenario_name:$VERSION"
-    if docker push "$image_name:$VERSION"; then
-        print_success "Pushed $scenario_name:$VERSION"
-    else
-        print_error "Failed to push $scenario_name:$VERSION"
-        return 1
-    fi
-
-    print_info "Pushing $scenario_name:latest"
-    if docker push "$image_name:latest"; then
-        print_success "Pushed $scenario_name:latest"
-    else
-        print_error "Failed to push $scenario_name:latest"
-        return 1
-    fi
-
-    return 0
-}
 
 main() {
     print_header "K8s Workshop - Build and Push All Images"
@@ -163,21 +173,14 @@ main() {
         echo -e "${BLUE}[$success_count/$total] Processing: $scenario_name${NC}"
         echo "------------------------------------------------------------"
 
-        # Build
-        if ! build_image "$scenario_name" "$scenario_path"; then
+        # Build and push (buildx does both in one step)
+        if ! build_and_push_image "$scenario_name" "$scenario_path"; then
             failed_scenarios+=("$scenario_name")
-            print_warning "Skipping push for $scenario_name due to build failure"
+            print_warning "Build/push failed for $scenario_name"
             continue
         fi
 
-        # Push
-        if ! push_image "$scenario_name"; then
-            failed_scenarios+=("$scenario_name")
-            print_warning "Push failed for $scenario_name"
-            continue
-        fi
-
-        print_success "Successfully built and pushed $scenario_name"
+        print_success "Successfully built and pushed $scenario_name (multi-platform)"
         echo ""
     done
 
