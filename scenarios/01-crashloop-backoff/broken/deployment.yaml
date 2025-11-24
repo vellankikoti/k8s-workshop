@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crashloop-app
+  labels:
+    app: crashloop-app
+    scenario: "01"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: crashloop-app
+  template:
+    metadata:
+      labels:
+        app: crashloop-app
+    spec:
+      containers:
+      - name: app
+        image: vellankikoti/k8s-masterclass-crashloop:v1.0
+        # BROKEN: Missing required environment variable REQUIRED_CONFIG
+        # This will cause the application to exit with error code 1

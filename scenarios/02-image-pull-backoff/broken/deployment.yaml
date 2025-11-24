@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: imagepull-app
+  labels:
+    app: imagepull-app
+    scenario: "02"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: imagepull-app
+  template:
+    metadata:
+      labels:
+        app: imagepull-app
+    spec:
+      containers:
+      - name: app
+        # BROKEN: Using a non-existent image tag
+        # The tag "broken" doesn't exist in the registry
+        image: vellankikoti/k8s-masterclass-crashloop:broken

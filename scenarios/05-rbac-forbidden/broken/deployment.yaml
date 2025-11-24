@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pod-monitor
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pod-monitor
+  labels:
+    app: pod-monitor
+    scenario: "05"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pod-monitor
+  template:
+    metadata:
+      labels:
+        app: pod-monitor
+    spec:
+      # BROKEN: ServiceAccount specified but no Role/RoleBinding!
+      # The app will get 403 Forbidden when trying to list pods
+      serviceAccountName: pod-monitor
+      containers:
+      - name: monitor
+        image: vellankikoti/k8s-masterclass-rbac-app:v1.0
+        ports:
+        - containerPort: 5000
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pod-monitor-service
+spec:
+  selector:
+    app: pod-monitor
+  ports:
+  - port: 80
+    targetPort: 5000
+  type: ClusterIP

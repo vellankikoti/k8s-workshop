@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: imagepull-app
+  labels:
+    app: imagepull-app
+    scenario: "02"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: imagepull-app
+  template:
+    metadata:
+      labels:
+        app: imagepull-app
+    spec:
+      containers:
+      - name: app
+        # FIXED: Using the correct image tag
+        image: vellankikoti/k8s-masterclass-crashloop:v1.0
+        env:
+        - name: REQUIRED_CONFIG
+          value: "production"

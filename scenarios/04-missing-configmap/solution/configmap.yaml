@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blog-config
+data:
+  blog.json: |
+    {
+      "blog_name": "Kubernetes Learning Blog",
+      "tagline": "Master K8s troubleshooting, one scenario at a time",
+      "author": "K8s Workshop Team",
+      "theme": "tech-purple",
+      "max_posts_per_page": 15,
+      "comments_enabled": true
+    }

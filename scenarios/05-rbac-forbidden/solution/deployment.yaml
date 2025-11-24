@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pod-monitor
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-reader
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pod-monitor-binding
+subjects:
+- kind: ServiceAccount
+  name: pod-monitor
+  namespace: default
+roleRef:
+  kind: Role
+  name: pod-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pod-monitor
+  labels:
+    app: pod-monitor
+    scenario: "05"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pod-monitor
+  template:
+    metadata:
+      labels:
+        app: pod-monitor
+    spec:
+      # FIXED: ServiceAccount now has proper RBAC permissions
+      serviceAccountName: pod-monitor
+      containers:
+      - name: monitor
+        image: vellankikoti/k8s-masterclass-rbac-app:v1.0
+        ports:
+        - containerPort: 5000
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pod-monitor-service
+spec:
+  selector:
+    app: pod-monitor
+  ports:
+  - port: 80
+    targetPort: 5000
+  type: ClusterIP

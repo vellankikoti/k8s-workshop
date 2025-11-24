@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: image-processor
+  labels:
+    app: image-processor
+    scenario: "06"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: image-processor
+  template:
+    metadata:
+      labels:
+        app: image-processor
+    spec:
+      containers:
+      - name: processor
+        image: vellankikoti/k8s-masterclass-memory-hog:v1.0
+        ports:
+        - containerPort: 5000
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            # FIXED: Increased memory limit to handle processing
+            memory: "384Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: image-processor-service
+spec:
+  selector:
+    app: image-processor
+  ports:
+  - port: 80
+    targetPort: 5000
+  type: ClusterIP
